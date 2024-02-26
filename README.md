@@ -6,31 +6,17 @@ This is the code used in the article **Solving Kernel Ridge Regression with Grad
 python compare_pens.py
 ```
 
+## Table 3, 4, 6, 7, 8 and 9:
+```
+bash run_sgd_cd.py                    #Calls sgd_cd.py.
+python tab_sgd_cd.py aim=\"sgd\"      #Uses data in sgd_data
+python tab_sgd_cd_all.py aim=\"sgd\"  #Uses data in sgd_data
+python tab_sgd_cd.py aim=\"cd\"       #Uses data in cd_data
+python tab_sgd_cd_all.py aim=\"cd\"   #Uses data in cd_data
+```
+
 ## Figure 3:
 ```
 python syn_sgd_cd_expl.py
 ```
 
-## Table 3:
-```
-bash run_sgd_cd.py syn_cd             #Calls sgd_cd.py.
-python tab_sgd_cd.py data=\"syn_cd\"  #Uses data in sgd_cd_data
-```
-
-## Table 4:
-```
-bash run_sgd_cd.py syn_sgd            #Calls sgd_cd.py.
-python tab_sgd_cd.py data=\"syn_sgd\" #Uses data in sgd_cd_data
-```
-
-## Table 5:
-```
-bash run_sgd_cd.py bs_cd              #Calls sgd_cd.py.
-python tab_sgd_cd.py data=\"bs_cd\"   #Uses data in sgd_cd_data
-```
-
-## Table 6:
-```
-bash run_sgd_cd.py bs_sgd             #Calls sgd_cd.py.
-python tab_sgd_cd.py data=\"bs_sgd\"  #Uses data in sgd_cd_data
-```

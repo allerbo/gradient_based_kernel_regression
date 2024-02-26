@@ -4,16 +4,17 @@ from help_fcts import r2, krr, kern
 from gd_algs import prox_grad
 import pickle
 import time
-import sys
+from sklearn import datasets
 
 def mse(y,y_hat):
   return np.mean(np.square(y-y_hat))
 
-def kgd(x_val, x_tr, y_tr, sigma, nu, alg, n_iters=None, y_val=None, step_size=0.01, t_max=1e3, auto=False):
+def kgd(x_val, x_tr, y_tr, sigma, nu, alg, n_iters=None, y_val=None, step_size=1e-4, t_max=1e3, auto=False, egd_alpha=0.9,gamma=0.5):
   K_tr=kern(x_tr, x_tr, sigma, nu)
   K_val=kern(x_val, x_tr, sigma, nu)
   
   alpha=np.zeros(y_tr.shape)
+  alpha_old=np.zeros(y_tr.shape)
   if auto:
     best_mse=np.inf
     mse_counter=0
@@ -26,7 +27,13 @@ def kgd(x_val, x_tr, y_tr, sigma, nu, alg, n_iters=None, y_val=None, step_size=0
       alpha-=step_size*np.sign(grad)
     elif alg=='cd':
       alpha-=step_size*np.sign(grad)*(np.abs(grad)==np.max(np.abs(grad)))
-    
+    elif alg=='egd':
+      a_grad=np.abs(grad)
+      I01=(a_grad/np.max(a_grad)>=egd_alpha)
+      el_grad=I01*grad
+      alpha_diff=alpha-alpha_old
+      alpha_old=np.copy(alpha)
+      alpha = alpha + gamma*alpha_diff-step_size*(egd_alpha*np.sign(el_grad)+(1-egd_alpha)*el_grad)
     if auto:
       mse_val=mse(y_val,K_val@alpha)
       if mse_val<best_mse:
@@ -41,7 +48,7 @@ def kgd(x_val, x_tr, y_tr, sigma, nu, alg, n_iters=None, y_val=None, step_size=0
   return K_val@alpha, alpha
   
 
-def cv_10_kgd(x,y,sigma_bounds,nu,alg,seed, step_size=0.01, n_sigmas=30):
+def cv_10_kgd(x,y,sigma_bounds,nu,alg,seed, n_sigmas=30):
   sigmas=np.geomspace(*sigma_bounds,n_sigmas)
   n=x.shape[0]
   np.random.seed(seed)
@@ -58,7 +65,7 @@ def cv_10_kgd(x,y,sigma_bounds,nu,alg,seed, step_size=0.01, n_sigmas=30):
       y_tr=y[t_folds,:]
       x_val=x[v_folds,:]
       y_val=y[v_folds,:]
-      mse, n_iter=kgd(x_val, x_tr, y_tr, sigma, nu, alg, y_val=y_val, step_size=step_size, auto=True)
+      mse, n_iter=kgd(x_val, x_tr, y_tr, sigma, nu, alg, y_val=y_val, auto=True)
       mses.append(mse)
       n_iters.append(n_iter)
     mean_mse=np.mean(mses)
@@ -109,171 +116,139 @@ def cv_10_kxrr(x,y,lbda_bounds,sigma_bounds,nu,seed,nrm,n_lbdas=30,n_sigmas=30):
   return best_params[1], best_params[2]
 
 
+def make_data_synth(seed=None, alg='sgd'):
+  if not seed is None:
+    np.random.seed(seed)
+  N_TR=100
+  N_TE=1000
+  X_MAX=10
+  if alg=='sgd':
+    def fy(x):
+      return np.sin(1/4*2*np.pi*x)
+  else:
+    def fy(x):
+      return np.exp(-5*x**2)
+  x_tr=np.random.uniform(-X_MAX,X_MAX,N_TR).reshape((-1,1))
+  if alg=='sgd':
+    y_tr=fy(x_tr)+0.1*np.random.standard_cauchy((N_TR,1))
+    sigma_bounds=[0.1,10]
+  else:
+    x_tr[0]=0
+    y_tr=fy(x_tr)+np.random.normal(0,0.1,(N_TR,1))
+    sigma_bounds=[0.1,1]
+  x_te=np.linspace(-X_MAX, X_MAX, N_TE).reshape((-1,1))
+  y_te=fy(x_te)
+  lbda_bounds=[1e-5,10]
+  return x_tr, y_tr, x_te, y_te, lbda_bounds, sigma_bounds
 
-def in_hull(p, hull):
-  from scipy.spatial import Delaunay
-  if not isinstance(hull,Delaunay):
-    hull = Delaunay(hull)
+
+def make_data_real(data, seed=None, alg='sgd'):
+  FRAC=0.8
+  if data=='wood':
+    dm=pd.read_csv('wood-fibres.csv',sep=',').to_numpy()
+  elif data=='casp':
+    dm=pd.read_csv('CASP.csv',sep=',').to_numpy()
+  elif data=='bs':
+    dm=pd.read_csv('bs.csv',sep=',').to_numpy()
+  elif data=='house':
+    house=datasets.fetch_california_housing()
+    dm=np.hstack((house.target.reshape((-1,1)),house.data))
   
-  return hull.find_simplex(p)>=0
-
-def make_data_sin(seed=None):
   if not seed is None:
     np.random.seed(seed)
-  X_MAX=10
-  def fy(x):
-    return np.sin(1/4*2*np.pi*x)
-  x_tr=np.random.uniform(-X_MAX,X_MAX,N_TR).reshape((-1,1))
-  y_tr=fy(x_tr)+0.1*np.random.standard_cauchy((N_TR,1))
-  x1=np.linspace(-X_MAX, X_MAX, N_TE).reshape((-1,1))
-  y1=fy(x1)
-  lbda_bounds=[1e-5,10]
-  sigma_bounds=[0.1,10]
-  return x_tr, y_tr, x1, y1, lbda_bounds, sigma_bounds
-
-
-N_TR=100
-N_TE=1000
-
-def make_data_gauss(seed=None):
-  if not seed is None:
-    np.random.seed(seed)
-  X_MAX=10
-  def fy(x):
-    return np.exp(-5*x**2)
-  x_tr=np.random.uniform(-X_MAX,X_MAX,N_TR).reshape((-1,1))
-  x_tr[0]=0
-  y_tr=fy(x_tr)+np.random.normal(0,0.1,(N_TR,1))
-  x1=np.linspace(-X_MAX, X_MAX, N_TE).reshape((-1,1))
-  y1=fy(x1)
-  lbda_bounds=[1e-5,10]
-  sigma_bounds=[0.1,1]
-  return x_tr, y_tr, x1, y1, lbda_bounds, sigma_bounds
-
-
-def make_data_bs(seed, alg):
-  bs_data=pd.read_csv('bs_2000.csv',sep=',').to_numpy()
-  np.random.seed(0)
-  bs_data1=bs_data[bs_data[:,1]==seed]
-  np.random.shuffle(bs_data1)
-  X=bs_data1[:,8:10]
+  
+  np.random.shuffle(dm)
+  dm=dm[:500,:]
+  
+  X=dm[:,1:]
   X=(X-np.mean(X, 0))/np.std(X,0)
-  y=bs_data1[:,5].reshape((-1,1))
+  n=X.shape[0]
+  X_tr=X[:int(FRAC*n),:]
+  X_te=X[int(FRAC*n):,:]
+  
+  y=dm[:,0].reshape((-1,1))
   y=y-np.mean(y)
   if alg=='sgd':
-    y*=(1+0.01*np.abs(np.random.standard_cauchy(y.shape)))
-  n=X.shape[0]
-  per=np.random.permutation(n)
-  folds=np.array_split(per,10)
-  sigma_bounds=[0.01,10]
+    y*=(1+0.1*np.abs(np.random.standard_cauchy(y.shape)))
+  y_tr=y[:int(FRAC*n),:]
+  y_te=y[int(FRAC*n):,:]
+  
+  sigma_bounds=[0.1,10]
   lbda_bounds=[1e-3,1]
-  return X, y, folds, lbda_bounds, sigma_bounds
+  return X_tr, y_tr, X_te, y_te, lbda_bounds, sigma_bounds
 
-def cv_split(X, y, v_fold):
-  t_idxs=np.concatenate([folds[t_fold] for t_fold in range(len(folds)) if v_fold != t_fold])
-  v_idxs=folds[v_fold]
-   
-  X_tr=X[t_idxs,:]
-  X_te=X[v_idxs,:]
-  y_tr=y[t_idxs,:]
-  y_te=y[v_idxs,:]
-  
-  #Remove outside convex hull
-  in_ch=in_hull(X_te,X_tr)
-  X_te=X_te[in_ch,:]
-  y_te=y_te[in_ch,:]
-  
-  return X_tr, y_tr, X_te, y_te
 
-N_LS=30
+N_LS=50
 
 nu=100
 seed=1
-data='syn_cd'
+data='synth'
+alg='sgd'
+#alg='cd'
 for arg in range(1,len(sys.argv)):
   exec(sys.argv[arg])
 
-if data=='syn_sgd':
-  alg='sgd'
-  nrm='linf'
-  make_data=make_data_sin
-elif data=='syn_cd':
-  alg='cd'
-  nrm='l1'
-  make_data=make_data_gauss
-elif data=='bs_cd':
-  alg='cd'
-  nrm='l1'
-  make_data=make_data_bs
-elif data=='bs_sgd':
-  alg='sgd'
-  nrm='linf'
-  make_data=make_data_bs
+if data=='synth':
+  X_tr, y_tr, X_te, y_te, lbda_bounds, sigma_bounds = make_data_synth(seed,alg)
+else:
+  X_tr, y_tr, X_te, y_te, lbda_bounds, sigma_bounds = make_data_real(data, seed,alg)
 
+if alg=='sgd':
+  nrm='linf'
+  metrics=['r2','time']
+  algs=['kxd', 'kgd','kxr','krr']
+elif alg=='cd':
+  nrm='l1'
+  metrics=['r2','time','sparsity']
+  algs=['kxd', 'kgd','kxr','krr','kegd']
 
-metrics=['r2','time','sparsity']
-algs=['kxd', 'kgd','kxr','krr']
 data_dict={}
 for metric in metrics:
   data_dict[metric]={}
   for alg1 in algs:
     data_dict[metric][alg1]=[]
 
-if data=='bs_cd':
-  for metric in metrics:
-    data_dict[metric]['kxd1']=[]
 
-if data[:2]=='bs':
-  X, y, folds, lbda_bounds, sigma_bounds = make_data_bs(seed, alg)
-else:
-  X_tr, y_tr, X_te, y_te, lbda_bounds, sigma_bounds=make_data(seed)
-  folds=[0]
+n_tr=X_tr.shape[0]
 
+t1=time.time()
+n_iters_kxd, sigma_kxd=cv_10_kgd(X_tr,y_tr,sigma_bounds,nu,alg,seed, n_sigmas=N_LS)
+fh_kxd, alphah_kxd =kgd(X_te,X_tr, y_tr, sigma_kxd, nu, alg, n_iters_kxd)
+data_dict['time']['kxd']=time.time()-t1
+data_dict['r2']['kxd']=r2(y_te,fh_kxd)
 
-for v_fold in range(len(folds)):
-  if data[:2]=='bs':
-    X_tr, y_tr, X_te, y_te = cv_split(X, y, v_fold)
-  n_tr=X_tr.shape[0]
+t1=time.time()
+n_iters_kgd, sigma_kgd=cv_10_kgd(X_tr,y_tr,sigma_bounds,nu,'gd',seed, n_sigmas=N_LS)
+fh_kgd, alphah_kgd =kgd(X_te,X_tr, y_tr, sigma_kgd, nu, 'gd', n_iters_kgd)
+data_dict['time']['kgd']=time.time()-t1
+data_dict['r2']['kgd']=r2(y_te,fh_kgd)
 
-  t1=time.time()
-  n_iters_kxd, sigma_kxd=cv_10_kgd(X_tr,y_tr,sigma_bounds,nu,alg,seed, n_sigmas=N_LS)
-  fh_kxd, alphah_kxd =kgd(X_te,X_tr, y_tr, sigma_kxd, nu, alg, n_iters_kxd)
-  data_dict['time']['kxd'].append(time.time()-t1)
+t1=time.time()
+lbda_kxr, sigma_kxr=cv_10_kxrr(X_tr,y_tr,lbda_bounds,sigma_bounds,nu,seed,nrm, n_lbdas=N_LS, n_sigmas=N_LS)
+fh_kxr, alphah_kxr=kxr(X_te, X_tr, y_tr, lbda_kxr,sigma_kxr,nu,nrm)
+data_dict['time']['kxr']=time.time()-t1
+data_dict['r2']['kxr']=r2(y_te,fh_kxr)
 
-  t1=time.time()
-  n_iters_kgd, sigma_kgd=cv_10_kgd(X_tr,y_tr,sigma_bounds,nu,'gd',seed, n_sigmas=N_LS)
-  fh_kgd, alphah_kgd =kgd(X_te,X_tr, y_tr, sigma_kgd, nu, 'gd', n_iters_kgd)
-  data_dict['time']['kgd'].append(time.time()-t1)
+t1=time.time()
+lbda_krr, sigma_krr=cv_10_kxrr(X_tr,y_tr,lbda_bounds,sigma_bounds,nu,seed, 'ridge', n_lbdas=N_LS, n_sigmas=N_LS)
+fh_krr=krr(X_te,X_tr,y_tr,lbda_krr,sigma_krr,nu, center=False)
+data_dict['time']['krr']=time.time()-t1
+data_dict['r2']['krr']=r2(y_te,fh_krr)
+
+if alg=='cd':
+  data_dict['sparsity']['kxd']=np.sum(alphah_kxd!=0)/n_tr
+  data_dict['sparsity']['kgd']=np.sum(alphah_kgd!=0)/n_tr
+  data_dict['sparsity']['kxr']=np.sum(alphah_kxr!=0)/n_tr
+  data_dict['sparsity']['krr']=1
   
   t1=time.time()
-  lbda_kxr, sigma_kxr=cv_10_kxrr(X_tr,y_tr,lbda_bounds,sigma_bounds,nu,seed,nrm, n_lbdas=N_LS, n_sigmas=N_LS)
-  fh_kxr, alphah_kxr=kxr(X_te, X_tr, y_tr, lbda_kxr,sigma_kxr,nu,nrm)
-  data_dict['time']['kxr'].append(time.time()-t1)
-  
-  t1=time.time()
-  lbda_krr, sigma_krr=cv_10_kxrr(X_tr,y_tr,lbda_bounds,sigma_bounds,nu,seed, 'ridge', n_lbdas=N_LS, n_sigmas=N_LS)
-  fh_krr=krr(X_te,X_tr,y_tr,lbda_krr,sigma_krr,nu, center=False)
-  data_dict['time']['krr'].append(time.time()-t1)
-      
-  data_dict['r2']['kxd'].append(r2(y_te,fh_kxd))
-  data_dict['r2']['kgd'].append(r2(y_te,fh_kgd))
-  data_dict['r2']['kxr'].append(r2(y_te,fh_kxr))
-  data_dict['r2']['krr'].append(r2(y_te,fh_krr))
-  
-  data_dict['sparsity']['kxd'].append(np.sum(alphah_kxd!=0)/n_tr)
-  data_dict['sparsity']['kgd'].append(np.sum(alphah_kgd!=0)/n_tr)
-  data_dict['sparsity']['kxr'].append(np.sum(alphah_kxr!=0)/n_tr)
-  data_dict['sparsity']['krr'].append(1)
+  n_iters_kegd, sigma_kegd=cv_10_kgd(X_tr,y_tr,sigma_bounds,nu,'egd',seed, n_sigmas=N_LS)
+  fh_kegd, alphah_kegd =kgd(X_te,X_tr, y_tr, sigma_kegd, nu, 'egd', n_iters_kegd)
+  data_dict['time']['kegd']=time.time()-t1
+  data_dict['r2']['kegd']=r2(y_te,fh_kegd)
+  data_dict['sparsity']['kegd']=np.sum(alphah_kegd!=0)/n_tr
+    
 
-  if data=='bs_cd':
-    t1=time.time()
-    n_iters_kxd1, sigma_kxd1=cv_10_kgd(X_tr,y_tr,sigma_bounds,nu,alg,seed, step_size=0.1, n_sigmas=N_LS)
-    fh_kxd1, alphah_kxd1 =kgd(X_te,X_tr, y_tr, sigma_kxd1, nu, alg, n_iters_kxd1, step_size=0.1)
-    data_dict['time']['kxd1'].append(time.time()-t1)
-    data_dict['r2']['kxd1'].append(r2(y_te,fh_kxd1))
-    data_dict['sparsity']['kxd1'].append(np.sum(alphah_kxd1!=0)/n_tr)
-
-
-fi=open('sgd_cd_data/'+data+'_nu_seed_'+str(nu)+'_'+str(seed)+'.pkl','wb')
+fi=open(alg+'_data/'+data+'_'+alg+'_'+str(nu)+'_'+str(seed)+'.pkl','wb')
 pickle.dump(data_dict,fi)
 fi.close()

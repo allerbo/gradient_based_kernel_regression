@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #SBATCH -A ####
-#SBATCH -t 10:00:00
+#SBATCH -t 2-00:00:00
 #SBATCH -o out_sgd_cd.txt
 #SBATCH -e err_sgd_cd.txt
 #SBATCH -n 1

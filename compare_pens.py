@@ -67,7 +67,6 @@ l=3
 seed=0
 
 np.random.seed(seed)
-#x=np.sort(np.random.uniform(0,l,n).reshape((-1,1)),0)
 x=np.array([0.1,0.5,1.0,1.5,2.1,2.5,2.9]).reshape((-1,1))
 n=x.shape[0]
 y=f(x)+np.random.normal(0,.01,x.shape)
@@ -103,12 +102,12 @@ fig3,axss3=plt.subplots(2,3,figsize=(10,5))
 
 for axss in [axss1,axss2]:
   axss[0,0].set_title('KRR and KGF',fontsize=13)
-  axss[0,1].set_title('K$\\ell_1$R and KCD',fontsize=13)
-  axss[0,2].set_title('K$\\ell_\\infty$R and KSGD',fontsize=13)
+  axss[0,1].set_title('K$\\ell_\\infty$R and KSGD',fontsize=13)
+  axss[0,2].set_title('K$\\ell_1$R and KCD',fontsize=13)
 
 axss3[0,0].set_title('KRR',fontsize=13)
-axss3[0,1].set_title('K$\\ell_1$R',fontsize=13)
-axss3[0,2].set_title('K$\\ell_\\infty$R',fontsize=13)
+axss3[0,1].set_title('K$\\ell_\\infty$R',fontsize=13)
+axss3[0,2].set_title('K$\\ell_1$R',fontsize=13)
 
 axss1[0,0].set_ylabel('$\\hat{f}$',fontsize=13)
 axss1[1,0].set_ylabel('$\\hat{f}$',fontsize=13)
@@ -117,8 +116,8 @@ axss2[1,0].set_ylabel('$\\alpha$',fontsize=13)
 axss3[0,0].set_ylabel('$\\hat{f}$',fontsize=13)
 axss3[1,0].set_ylabel('$\\hat{f}$',fontsize=13)
 
-lbdass_a=[[.0007,0.0015,0.003],[.0002,0.0007,0.0007]]
-lbdass_f=[[.00065,0.0021,.65],[.0002,0.001,.095]]
+lbdass_a=[[.0007,0.003,0.0015],[.0002,0.0007,0.0007]]
+lbdass_f=[[.00065,0.65,.0021],[.0002,0.095,.001]]
 
 BW=0.35
 LW=2
@@ -132,10 +131,10 @@ fig3.legend(lines3, labs3, loc='lower center', ncol=3)
 fig3.tight_layout()
 fig3.subplots_adjust(bottom=0.17)
 
-lbdass_a=[[1,0.0015,0.003],[.35,0.0007,0.0007]]
+lbdass_a=[[1,0.003,0.0015],[.35,0.0007,0.0007]]
 
 for axs1,axs2,axs3,lbdas_a,lbdas_f in zip(axss1,axss2,axss3,lbdass_a,lbdass_f):
-  for ax1, ax2, ax3, nrm, alg,lbda_a,lbda_f in zip(axs1,axs2,axs3,['l2','l1','linf'], ['gd','cd','sgd'],lbdas_a,lbdas_f):
+  for ax1, ax2, ax3, nrm, alg,lbda_a,lbda_f in zip(axs1,axs2,axs3,['l2','linf','l1'], ['gd','sgd','cd'],lbdas_a,lbdas_f):
     if nrm=='l2':
       alphah_l=np.linalg.inv(K+lbda_a*np.eye(n))@y
       alphah_t=np.linalg.inv(K)@(np.eye(n)-expm(-1/lbda_a*K))@y
